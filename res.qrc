@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/new/prefix1">
+        <file>res/free-icon-monster-4313173.png</file>
+        <file>res/location.png</file>
+        <file>res/magic.png</file>
+        <file>res/magic-cape.png</file>
+    </qresource>
+</RCC>
