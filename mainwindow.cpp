@@ -11,8 +11,9 @@
 #include <QBuffer>
 #include <QImageWriter>
 #include <QByteArray>
+#include <QStandardItemModel>
 
-    MainWindow::MainWindow(QWidget *parent)
+MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
@@ -22,6 +23,8 @@
     setupTreeView();  // Настраиваем файловое дерево
 
     connect(ui->cart_treeView, &QTreeView::doubleClicked, this, &MainWindow::openMap);
+    connect(ui->monsters_treeView, &QTreeView::customContextMenuRequested, this, &MainWindow::on_monsters_treeView_customContextMenuRequested);
+    ui->monsters_treeView->setContextMenuPolicy(Qt::CustomContextMenu);
 
 }
 
@@ -68,6 +71,42 @@ void MainWindow::setupTreeView()
     ui->cart_treeView->setHeaderHidden(true);  // Отключить заголовки
 }
 
+void MainWindow::setupMonstersTreeView()
+{
+    // Создаем модель для файловой системы
+    QFileSystemModel *fileSystemModel = new QFileSystemModel(this);
+    fileSystemModel->setRootPath("D:/DnD3/build/Qt_6_8_0_mingw_64-Debug/monsters");
+
+    // Устанавливаем модель в QTreeView
+    ui->monsters_treeView->setModel(fileSystemModel);
+
+    // Устанавливаем корневой путь для отображения
+    ui->monsters_treeView->setRootIndex(fileSystemModel->index("D:/DnD3/build/Qt_6_8_0_mingw_64-Debug/monsters"));
+
+    // Устанавливаем политику контекстного меню
+    ui->monsters_treeView->setContextMenuPolicy(Qt::CustomContextMenu);
+
+    // Подключаем сигнал контекстного меню
+    connect(ui->monsters_treeView, &QTreeView::customContextMenuRequested, this, &MainWindow::on_monsters_treeView_customContextMenuRequested);
+}
+
+void MainWindow::addNpcToTreeView(const NPC &npc)
+{
+    // Создаем новый элемент для отображения NPC с его именем
+    QStandardItem *npcItem = new QStandardItem(npc.getName());
+
+    // Сохраняем характеристики NPC в дополнительных данных элемента
+    npcItem->setData(npc.getCharacteristics(), Qt::UserRole + 1); // Характеристики NPC
+
+    // Также можно сохранить путь к изображению (если нужно для использования в дальнейшем)
+    npcItem->setData(npc.getImagePath(), Qt::UserRole + 2); // Путь к изображению NPC
+
+    // Добавляем NPC в модель
+    npcModel->appendRow(npcItem);
+
+    // Обновляем модель
+    ui->monsters_treeView->setModel(npcModel);
+}
 
 // Функция переключения на "Бестиарий"
 void MainWindow::on_monsters_pushButton_released()
@@ -80,6 +119,129 @@ void MainWindow::on_monsters_pushButton_released()
         ui->extended_side_menu->setVisible(true);
     }
 }
+
+void MainWindow::on_monsters_treeView_customContextMenuRequested(const QPoint &pos)
+{
+    QMenu contextMenu(this);  // Создаем контекстное меню
+
+    QAction *addNpcAction = contextMenu.addAction("Добавить NPC");
+    QAction *editNpcAction = contextMenu.addAction("Изменить NPC");
+    QAction *removeNpcAction = contextMenu.addAction("Удалить NPC");
+
+    // Показываем меню в точке клика
+    QAction *selectedAction = contextMenu.exec(ui->monsters_treeView->mapToGlobal(pos));
+
+    QModelIndex index = ui->monsters_treeView->indexAt(pos);
+    QString npcFilePath;
+
+    if (index.isValid()) {
+        npcFilePath = fileSystemModel->filePath(index);
+    }
+
+    // Если выбрано добавление NPC
+    if (selectedAction == addNpcAction) {
+        // Открываем диалог для ввода имени NPC
+        bool ok;
+        QString name = QInputDialog::getText(this, "Введите имя NPC", "Имя NPC:", QLineEdit::Normal, "", &ok);
+        if (!ok || name.isEmpty()) return;
+
+        // Открываем диалог для ввода характеристик NPC
+        QString characteristics = QInputDialog::getText(this, "Введите характеристики NPC", "Характеристики NPC:", QLineEdit::Normal, "", &ok);
+        if (!ok || characteristics.isEmpty()) return;
+
+        // Открываем диалог для выбора изображения NPC
+        QString imagePath = QFileDialog::getOpenFileName(this, "Выберите изображение NPC", "", "Images (*.png *.jpg *.jpeg)");
+        if (imagePath.isEmpty()) return;
+
+        // Создаем папку для NPC в директории monsters (если её нет)
+        QString npcDirectory = QDir::currentPath() + "/monsters";
+        QDir dir;
+        if (!dir.exists(npcDirectory)) {
+            dir.mkpath(npcDirectory);
+        }
+
+        // Сохраняем NPC как JSON
+        QString npcFilePath = npcDirectory + "/" + name + ".json";
+        QJsonObject npcObject;
+        npcObject["name"] = name;
+        npcObject["characteristics"] = characteristics;
+        npcObject["image"] = imagePath;  // Путь к изображению NPC
+
+        QJsonDocument doc(npcObject);
+        QFile npcFile(npcFilePath);
+        if (npcFile.open(QIODevice::WriteOnly)) {
+            npcFile.write(doc.toJson());
+            npcFile.close();
+            QMessageBox::information(this, "Успех", "NPC добавлен.");
+        } else {
+            QMessageBox::warning(this, "Ошибка", "Не удалось сохранить NPC.");
+        }
+    }
+    // Если выбрано редактирование NPC
+    else if (selectedAction == editNpcAction) {
+        if (!npcFilePath.isEmpty()) {
+            QFile npcFile(npcFilePath);
+            if (!npcFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                QMessageBox::warning(this, "Ошибка", "Не удалось открыть файл NPC.");
+                return;
+            }
+
+            QByteArray npcData = npcFile.readAll();
+            npcFile.close();
+
+            QJsonDocument doc = QJsonDocument::fromJson(npcData);
+            if (doc.isNull()) {
+                QMessageBox::warning(this, "Ошибка", "Не удалось прочитать данные NPC.");
+                return;
+            }
+
+            QJsonObject npcObject = doc.object();
+            QString name = npcObject["name"].toString();
+            QString characteristics = npcObject["characteristics"].toString();
+            QString imagePath = npcObject["image"].toString();
+
+            // Открываем диалог для редактирования имени NPC
+            bool ok;
+            QString newName = QInputDialog::getText(this, "Редактировать имя NPC", "Имя NPC:", QLineEdit::Normal, name, &ok);
+            if (!ok || newName.isEmpty()) return;
+
+            // Открываем диалог для редактирования характеристик NPC
+            QString newCharacteristics = QInputDialog::getText(this, "Редактировать характеристики NPC", "Характеристики NPC:", QLineEdit::Normal, characteristics, &ok);
+            if (!ok || newCharacteristics.isEmpty()) return;
+
+            // Открываем диалог для выбора нового изображения NPC
+            QString newImagePath = QFileDialog::getOpenFileName(this, "Выберите изображение NPC", imagePath, "Images (*.png *.jpg *.jpeg)");
+            if (newImagePath.isEmpty()) newImagePath = imagePath;  // Если изображение не изменилось
+
+            // Обновляем данные NPC
+            npcObject["name"] = newName;
+            npcObject["characteristics"] = newCharacteristics;
+            npcObject["image"] = newImagePath;
+
+            // Сохраняем изменения в файл NPC
+            QFile editedNpcFile(npcFilePath);
+            if (editedNpcFile.open(QIODevice::WriteOnly)) {
+                QJsonDocument newDoc(npcObject);
+                editedNpcFile.write(newDoc.toJson());
+                editedNpcFile.close();
+                QMessageBox::information(this, "Успех", "NPC обновлен.");
+            } else {
+                QMessageBox::warning(this, "Ошибка", "Не удалось сохранить изменения NPC.");
+            }
+        }
+    }
+    // Если выбрано удаление NPC
+    else if (selectedAction == removeNpcAction) {
+        if (!npcFilePath.isEmpty()) {
+            if (QFile::remove(npcFilePath)) {
+                QMessageBox::information(this, "Успех", "NPC удален.");
+            } else {
+                QMessageBox::warning(this, "Ошибка", "Не удалось удалить NPC.");
+            }
+        }
+    }
+}
+
 
 // Функция переключения на "Заклинания"
 void MainWindow::on_spells_pushButton_released()
@@ -313,4 +475,3 @@ void MainWindow::openMap(const QModelIndex &index)
         }
     }
 }
-

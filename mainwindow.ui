@@ -66,7 +66,7 @@
        </size>
       </property>
       <property name="currentIndex">
-       <number>3</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="monster_page">
        <layout class="QVBoxLayout" name="verticalLayout_3">
@@ -93,7 +93,7 @@
          </widget>
         </item>
         <item>
-         <widget class="QListView" name="monster_listView">
+         <widget class="QTreeView" name="monsters_treeView">
           <property name="styleSheet">
            <string notr="true">background: transparent;
     border: none; /* Если нужно убрать рамки */</string>

@@ -11,11 +11,13 @@ CONFIG += c++17
 SOURCES += \
     main.cpp \
     mainwindow.cpp \
-    mapwidget.cpp
+    mapwidget.cpp \
+    npc.cpp
 
 HEADERS += \
     mainwindow.h \
-    mapwidget.h
+    mapwidget.h \
+    npc.h
 
 FORMS += \
     mainwindow.ui
