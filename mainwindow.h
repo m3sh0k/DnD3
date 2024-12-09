@@ -43,6 +43,7 @@ private:
     void setupTreeView();                           // Настройка файлового дерева
     void setupMonstersTreeView();
     void addNpcToTreeView(const NPC &npc);
+    void loadMonstersFromFiles();
 
     // Модель для дерева
     QStandardItemModel *npcModel;

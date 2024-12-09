@@ -21,10 +21,16 @@ MainWindow::MainWindow(QWidget *parent)
 
     setupSideMenu();  // Настраиваем боковое меню
     setupTreeView();  // Настраиваем файловое дерево
+    setupMonstersTreeView();  // Настраиваем отображение монстров
 
     connect(ui->cart_treeView, &QTreeView::doubleClicked, this, &MainWindow::openMap);
     connect(ui->monsters_treeView, &QTreeView::customContextMenuRequested, this, &MainWindow::on_monsters_treeView_customContextMenuRequested);
     ui->monsters_treeView->setContextMenuPolicy(Qt::CustomContextMenu);
+
+    npcModel = new QStandardItemModel(this);
+    ui->monsters_treeView->setModel(npcModel);
+
+    loadMonstersFromFiles();  // Загружаем данные NPC при запуске
 
 }
 
@@ -48,64 +54,73 @@ void MainWindow::setupSideMenu()
 // Настройка файлового дерева
 void MainWindow::setupTreeView()
 {
-    // Путь к папке map
     QString mapsPath = QDir::currentPath() + "/map";
-
-    // Проверка и создание папки map, если её нет
     QDir dir;
     if (!dir.exists(mapsPath)) {
-        dir.mkpath(mapsPath);  // Создать папку, если её нет
+        dir.mkpath(mapsPath);
     }
 
-    // Создаем модель файловой системы
     fileSystemModel = new QFileSystemModel(this);
-    fileSystemModel->setRootPath(mapsPath);  // Устанавливаем корень как папку "map"
+    fileSystemModel->setRootPath(mapsPath);
 
-    ui->cart_treeView->setModel(fileSystemModel);       // Привязываем модель к TreeView
-    ui->cart_treeView->setRootIndex(fileSystemModel->index(mapsPath));  // Устанавливаем корень TreeView на "map"
+    ui->cart_treeView->setModel(fileSystemModel);
+    ui->cart_treeView->setRootIndex(fileSystemModel->index(mapsPath));
 
-    // Скрываем ненужные столбцы
-    ui->cart_treeView->hideColumn(1); // Скрываем "Size"
-    ui->cart_treeView->hideColumn(2); // Скрываем "Type"
-    ui->cart_treeView->hideColumn(3); // Скрываем "Date"
-    ui->cart_treeView->setHeaderHidden(true);  // Отключить заголовки
+    ui->cart_treeView->hideColumn(1);
+    ui->cart_treeView->hideColumn(2);
+    ui->cart_treeView->hideColumn(3);
+    ui->cart_treeView->setHeaderHidden(true);
 }
 
 void MainWindow::setupMonstersTreeView()
 {
-    // Создаем модель для файловой системы
-    QFileSystemModel *fileSystemModel = new QFileSystemModel(this);
-    fileSystemModel->setRootPath("D:/DnD3/build/Qt_6_8_0_mingw_64-Debug/monsters");
+    QString monstersPath = QDir::currentPath() + "/monsters";
+    QDir dir(monstersPath);
+    if (!dir.exists()) {
+        dir.mkpath(monstersPath);
+    }
+}
 
-    // Устанавливаем модель в QTreeView
-    ui->monsters_treeView->setModel(fileSystemModel);
 
-    // Устанавливаем корневой путь для отображения
-    ui->monsters_treeView->setRootIndex(fileSystemModel->index("D:/DnD3/build/Qt_6_8_0_mingw_64-Debug/monsters"));
+void MainWindow::loadMonstersFromFiles()
+{
+    QString monstersPath = QDir::currentPath() + "/monsters";
+    QDir dir(monstersPath);
 
-    // Устанавливаем политику контекстного меню
-    ui->monsters_treeView->setContextMenuPolicy(Qt::CustomContextMenu);
+    // Получаем список JSON файлов
+    QStringList filters = {"*.json"};
+    QStringList monsterFiles = dir.entryList(filters, QDir::Files);
 
-    // Подключаем сигнал контекстного меню
-    connect(ui->monsters_treeView, &QTreeView::customContextMenuRequested, this, &MainWindow::on_monsters_treeView_customContextMenuRequested);
+    for (const QString &fileName : monsterFiles) {
+        QString filePath = monstersPath + "/" + fileName;
+        QFile file(filePath);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QByteArray fileData = file.readAll();
+            file.close();
+
+            QJsonDocument doc = QJsonDocument::fromJson(fileData);
+            if (!doc.isNull()) {
+                QJsonObject npcObject = doc.object();
+                QString name = npcObject["name"].toString();
+                QString characteristics = npcObject["characteristics"].toString();
+                QString imagePath = npcObject["image"].toString();
+
+                // Добавляем NPC в модель
+                QStandardItem *npcItem = new QStandardItem(name);
+                npcItem->setData(characteristics, Qt::UserRole + 1);
+                npcItem->setData(imagePath, Qt::UserRole + 2);
+                npcModel->appendRow(npcItem);
+            }
+        }
+    }
 }
 
 void MainWindow::addNpcToTreeView(const NPC &npc)
 {
-    // Создаем новый элемент для отображения NPC с его именем
     QStandardItem *npcItem = new QStandardItem(npc.getName());
-
-    // Сохраняем характеристики NPC в дополнительных данных элемента
-    npcItem->setData(npc.getCharacteristics(), Qt::UserRole + 1); // Характеристики NPC
-
-    // Также можно сохранить путь к изображению (если нужно для использования в дальнейшем)
-    npcItem->setData(npc.getImagePath(), Qt::UserRole + 2); // Путь к изображению NPC
-
-    // Добавляем NPC в модель
+    npcItem->setData(npc.getCharacteristics(), Qt::UserRole + 1);
+    npcItem->setData(npc.getImagePath(), Qt::UserRole + 2);
     npcModel->appendRow(npcItem);
-
-    // Обновляем модель
-    ui->monsters_treeView->setModel(npcModel);
 }
 
 // Функция переключения на "Бестиарий"
